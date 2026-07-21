@@ -48,7 +48,28 @@ class DatabaseTests(unittest.TestCase):
         result = self.database.signup(self.event.id, 10, "dps")
         self.assertEqual(result, SignupResult.EVENT_CLOSED)
 
+    def test_build_can_be_assigned_to_template(self) -> None:
+        build = self.database.save_build(
+            guild_id=1, name="Dawnsong Arena", activity="Arena", weapon="Dawnsong",
+            offhand="", head="Royal Cowl", chest="Feyscale Robe", shoes="Cleric Sandals",
+            cape="Lymhurst Cape", food="Pork Omelette", potion="Resistance Potion",
+            abilities="Q1, W2, E", minimum_ip=1200, notes="Prueba",
+        )
+        self.database.create_template(1, "Cristal", "arena", "Composición de prueba")
+        template = self.database.upsert_template_slot(
+            guild_id=1, template_name="Cristal", role_key="dawnsong", label="Dawnsong",
+            emoji="🔥", capacity=1, build_id=build.id,
+        )
+        self.assertIsNotNone(template)
+        self.assertEqual(template.slots[0].build_name, "Dawnsong Arena")  # type: ignore[union-attr]
+
+    def test_custom_role_emoji_is_persisted(self) -> None:
+        self.database.set_role_emoji(1, "healer", "<:holy:123456789012345678>")
+        self.assertEqual(
+            self.database.get_role_emojis(1)["healer"],
+            "<:holy:123456789012345678>",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
-

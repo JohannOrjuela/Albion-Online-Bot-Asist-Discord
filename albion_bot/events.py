@@ -8,7 +8,7 @@ from discord.ext import commands
 
 from .activities import ACTIVITIES
 from .database import Database
-from .domain import EventStatus
+from .domain import EventStatus, SlotDefinition
 from .parsing import parse_local_datetime, parse_slots
 from .views import EventSignupView, build_event_embed
 
@@ -25,6 +25,18 @@ class EventsCog(commands.Cog):
     def __init__(self, bot: commands.Bot, database: Database) -> None:
         self.bot = bot
         self.database = database
+
+    def _guild_emojis(
+        self, guild_id: int, slots: tuple[SlotDefinition, ...]
+    ) -> tuple[SlotDefinition, ...]:
+        configured = self.database.get_role_emojis(guild_id)
+        return tuple(
+            SlotDefinition(
+                slot.key, slot.label, configured.get(slot.key, slot.emoji), slot.capacity,
+                slot.build_id, slot.build_name,
+            )
+            for slot in slots
+        )
 
     @event_group.command(name="crear", description="Publica un evento con inscripciones por rol")
     @app_commands.guild_only()
@@ -54,7 +66,9 @@ class EventsCog(commands.Cog):
             if starts_at <= datetime.now(timezone.utc):
                 raise ValueError("La fecha del evento debe estar en el futuro.")
             preset = ACTIVITIES[actividad.value]
-            slots = parse_slots(cupos) if cupos else preset.slots
+            slots = self._guild_emojis(
+                interaction.guild_id, parse_slots(cupos) if cupos else preset.slots
+            )
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
@@ -80,6 +94,78 @@ class EventsCog(commands.Cog):
         self.database.set_event_message(event.id, message.id)
         self.bot.add_view(view, message_id=message.id)
         await interaction.followup.send(f"Evento creado: {message.jump_url}", ephemeral=True)
+
+    @event_group.command(
+        name="desde-plantilla", description="Crea un evento usando una composición guardada"
+    )
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.describe(
+        plantilla="Nombre exacto de la plantilla",
+        fecha="Hora de Colombia: 20/07/2026 15:30",
+        titulo="Título opcional del evento",
+        descripcion="Información adicional para esta salida",
+    )
+    async def create_from_template(
+        self,
+        interaction: discord.Interaction,
+        plantilla: str,
+        fecha: str,
+        titulo: str | None = None,
+        descripcion: str | None = None,
+    ) -> None:
+        assert interaction.guild_id is not None and interaction.channel_id is not None
+        template = self.database.get_template(interaction.guild_id, plantilla)
+        if template is None:
+            await interaction.response.send_message("No encontré esa plantilla.", ephemeral=True)
+            return
+        if not template.slots:
+            await interaction.response.send_message(
+                "La plantilla no tiene roles. Añádelos con `/plantilla rol`.", ephemeral=True
+            )
+            return
+        try:
+            starts_at = parse_local_datetime(fecha, self.bot.settings.timezone)  # type: ignore[attr-defined]
+            if starts_at <= datetime.now(timezone.utc):
+                raise ValueError("La fecha del evento debe estar en el futuro.")
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        event = self.database.create_event(
+            guild_id=interaction.guild_id, channel_id=interaction.channel_id,
+            creator_id=interaction.user.id, activity=template.activity,
+            title=(titulo or template.name).strip()[:256],
+            description=(descripcion or template.description).strip()[:2000],
+            starts_at=starts_at, slots=template.slots,
+        )
+        view = EventSignupView(self.database, event)
+        try:
+            assert interaction.channel is not None
+            message = await interaction.channel.send(embed=build_event_embed(event), view=view)
+        except discord.Forbidden:
+            self.database.set_event_status(event.id, EventStatus.CANCELLED)
+            await interaction.followup.send(
+                "No puedo publicar en este canal. Necesito **Ver canal**, "
+                "**Enviar mensajes** e **Insertar enlaces**.", ephemeral=True,
+            )
+            return
+        self.database.set_event_message(event.id, message.id)
+        self.bot.add_view(view, message_id=message.id)
+        await interaction.followup.send(f"Evento creado: {message.jump_url}", ephemeral=True)
+
+    @create_from_template.autocomplete("plantilla")
+    async def template_name_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        if interaction.guild_id is None:
+            return []
+        needle = current.casefold()
+        return [
+            app_commands.Choice(name=template.name, value=template.name)
+            for template in self.database.list_templates(interaction.guild_id)
+            if needle in template.name.casefold()
+        ][:25]
 
     @event_group.command(name="cerrar", description="Cierra las inscripciones de un evento")
     @app_commands.guild_only()

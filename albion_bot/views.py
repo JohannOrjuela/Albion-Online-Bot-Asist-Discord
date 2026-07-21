@@ -35,9 +35,10 @@ def build_event_embed(event: GuildEvent) -> discord.Embed:
     for slot in event.slots:
         members = by_role[slot.key]
         names = "\n".join(f"{index}. <@{user_id}>" for index, user_id in enumerate(members, 1))
+        build_line = f"📜 `{slot.build_name}`\n" if slot.build_name else ""
         embed.add_field(
             name=f"{slot.emoji} {slot.label} ({len(members)}/{slot.capacity})",
-            value=names or "— Disponible —",
+            value=build_line + (names or "— Disponible —"),
             inline=True,
         )
     embed.set_footer(text=f"Evento #{event.id} · Usa los botones para elegir o cambiar tu rol")
@@ -104,9 +105,18 @@ class EventSignupView(discord.ui.View):
             SignupResult.EVENT_CLOSED: "Las inscripciones de este evento están cerradas.",
             SignupResult.SLOT_NOT_FOUND: "Ese rol ya no existe en el evento.",
         }
+        event = self.database.get_event(self.event_id)
+        build_name = None
+        if event is not None:
+            build_name = next(
+                (slot.build_name for slot in event.slots if slot.key == role_key), None
+            )
         if result in {SignupResult.JOINED, SignupResult.MOVED}:
             await self._refresh_message(interaction)
-        await interaction.followup.send(messages[result], ephemeral=True)
+        message = messages[result]
+        if build_name:
+            message += f"\nTu build asignada es **{build_name}**. Usa `/build ver` para consultarla."
+        await interaction.followup.send(message, ephemeral=True)
 
     async def leave(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -120,4 +130,3 @@ class EventSignupView(discord.ui.View):
         event = self.database.get_event(self.event_id)
         if event is not None and interaction.message is not None:
             await interaction.message.edit(embed=build_event_embed(event), view=self)
-

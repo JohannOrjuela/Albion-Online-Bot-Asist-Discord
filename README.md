@@ -1,8 +1,8 @@
 # Albion Guild Bot
 
-Bot de Discord para gestionar actividades de un gremio de Albion Online. La primera
-versión incluye eventos con cupos por rol, inscripciones mediante botones y datos
-persistentes aunque el bot o el PC se reinicien.
+Bot de Discord para gestionar actividades de un gremio de Albion Online. Incluye
+eventos con cupos por rol, builds ilustradas, composiciones reutilizables, emojis
+personalizados e inscripciones persistentes aunque el bot o el PC se reinicien.
 
 ## Requisitos
 
@@ -83,6 +83,62 @@ horaria de cada miembro. Crear eventos requiere **Gestionar servidor**.
 
 Puede hacerlo el creador o una persona con **Gestionar servidor**.
 
+## Builds
+
+Crea una build con nombres visibles del juego o con identificadores internos de Albion:
+
+```text
+/build crear nombre:Dawnsong Arena arma:Dawnsong casco:Royal Cowl pechera:Feyscale Robe botas:Cleric Sandals ip_minimo:1200
+```
+
+El bot consulta el servicio de renderizado de Albion, prueba nombres en español e inglés,
+y genera una imagen de 1600×900. Una arma nueva funciona tan pronto como el servicio de
+Albion reconozca su nombre o identificador; no depende de una lista fija en el código.
+
+```text
+/build ver nombre:Dawnsong Arena
+/build listar
+/build eliminar nombre:Dawnsong Arena
+```
+
+Si un nombre no produce icono, usa el identificador interno del objeto o prueba el nombre
+exacto mostrado por el cliente en español o inglés.
+
+## Plantillas de composición
+
+Flujo recomendado:
+
+```text
+/plantilla crear nombre:Arena Principal actividad:Arena de Cristal
+/plantilla rol plantilla:Arena Principal rol:Martillo cupos:1 build:Martillo Arena emoji:🔨
+/plantilla rol plantilla:Arena Principal rol:Dawnsong cupos:1 build:Dawnsong Arena emoji:🔥
+/plantilla rol plantilla:Arena Principal rol:Healer cupos:1 build:Holy Arena emoji:💚
+/plantilla ver nombre:Arena Principal
+```
+
+Después crea una salida sin volver a escribir la composición:
+
+```text
+/evento desde-plantilla plantilla:Arena Principal fecha:25/07/2026 20:00
+```
+
+El panel mostrará la build asignada bajo cada rol. Al apuntarse, el jugador recibe el
+nombre de su build y puede abrirla con `/build ver`.
+
+## Emojis personalizados
+
+Puedes utilizar emojis Unicode o emojis propios del servidor. Para un icono real de
+Albion, sube una imagen cuadrada en **Ajustes del servidor → Expresiones → Emoji** y
+pégalo como parámetro del comando:
+
+```text
+/config emoji rol:Dawnsong emoji:<emoji del servidor>
+/config ver-emojis
+```
+
+La asociación se aplica automáticamente a eventos nuevos y a roles nuevos de plantillas.
+También puedes elegir otro emoji directamente en `/plantilla rol`.
+
 ## Pruebas
 
 ```powershell
@@ -96,8 +152,7 @@ suficiente para crear una copia de seguridad. Nunca publiques `.env` ni la base 
 
 ## Próximos módulos
 
-1. Plantillas editables y recordatorios de eventos.
-2. Creador de builds con iconos de Albion y generación de imágenes.
+1. Edición de roles y recordatorios de eventos.
+2. Selector visual de habilidades y pasivas.
 3. Carteras privadas y libro de movimientos administrativos.
 4. Consultas de mercado por servidor y ciudad.
-

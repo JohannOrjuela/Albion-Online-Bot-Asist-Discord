@@ -13,7 +13,9 @@ SLOT_PATTERN = re.compile(r"^\s*([^:=]+)\s*[:=]\s*(\d+)\s*$")
 SLOT_EMOJIS = {
     "caller": "📣", "tank": "🛡️", "tanque": "🛡️", "offtank": "🛡️",
     "healer": "💚", "heal": "💚", "support": "✨", "soporte": "✨",
-    "dps": "⚔️", "sc": "🔷", "ironroot": "🔴",
+    "dps": "⚔️", "meledps": "⚔️", "mele-dps": "⚔️", "sc": "🔷",
+    "ironroot": "🌿", "martillo": "🔨", "dawnsong": "🔥",
+    "rotcaller": "🌀", "shadowcaller": "🟣", "frost": "❄️",
 }
 
 
@@ -41,7 +43,7 @@ def parse_slots(value: str) -> tuple[SlotDefinition, ...]:
         capacity = int(match.group(2))
         if not 1 <= capacity <= 99:
             raise ValueError("Cada cupo debe estar entre 1 y 99.")
-        key = _slugify(label)
+        key = slugify(label)
         if not key or key in keys:
             raise ValueError(f"El rol `{label}` está repetido o no es válido.")
         keys.add(key)
@@ -51,8 +53,7 @@ def parse_slots(value: str) -> tuple[SlotDefinition, ...]:
     return tuple(slots)
 
 
-def _slugify(value: str) -> str:
+def slugify(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
     return re.sub(r"[^a-z0-9]+", "-", ascii_value.lower()).strip("-")[:30]
-

@@ -6,8 +6,12 @@ import discord
 from discord.ext import commands
 
 from .config import ConfigError, Settings
+from .build_renderer import BuildRenderer
+from .builds import BuildsCog
+from .configuration import ConfigurationCog
 from .database import Database
 from .events import EventsCog
+from .templates import TemplatesCog
 from .views import EventSignupView
 
 
@@ -20,10 +24,14 @@ class AlbionGuildBot(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.settings = settings
         self.database = Database(settings.database_path)
+        self.build_renderer = BuildRenderer(settings.database_path.parent / "cache" / "icons")
 
     async def setup_hook(self) -> None:
         self.database.initialize()
         await self.add_cog(EventsCog(self, self.database))
+        await self.add_cog(BuildsCog(self, self.database, self.build_renderer))
+        await self.add_cog(TemplatesCog(self, self.database))
+        await self.add_cog(ConfigurationCog(self.database))
         for event in self.database.get_open_events():
             if event.message_id is not None:
                 self.add_view(EventSignupView(self.database, event), message_id=event.message_id)
@@ -52,4 +60,3 @@ def run() -> None:
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
     AlbionGuildBot(settings).run(settings.discord_token, log_handler=None)
-

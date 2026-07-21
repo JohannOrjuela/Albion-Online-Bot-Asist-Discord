@@ -17,6 +17,8 @@ class SlotDefinition:
     label: str
     emoji: str
     capacity: int
+    build_id: int | None = None
+    build_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,3 +52,44 @@ class SignupResult(StrEnum):
     EVENT_CLOSED = "event_closed"
     SLOT_NOT_FOUND = "slot_not_found"
 
+
+@dataclass(frozen=True, slots=True)
+class AlbionBuild:
+    id: int
+    guild_id: int
+    name: str
+    activity: str
+    weapon: str
+    offhand: str
+    head: str
+    chest: str
+    shoes: str
+    cape: str
+    food: str
+    potion: str
+    abilities: str
+    minimum_ip: int | None
+    notes: str
+
+    @property
+    def equipment(self) -> tuple[tuple[str, str], ...]:
+        return (
+            ("Arma", self.weapon),
+            ("Mano secundaria", self.offhand),
+            ("Casco", self.head),
+            ("Pechera", self.chest),
+            ("Botas", self.shoes),
+            ("Capa", self.cape),
+            ("Comida", self.food),
+            ("Poción", self.potion),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionTemplate:
+    id: int
+    guild_id: int
+    name: str
+    activity: str
+    description: str
+    slots: tuple[SlotDefinition, ...]
