@@ -8,7 +8,7 @@ from .activities import ACTIVITIES
 from .build_renderer import BuildRenderer
 from .builds import build_summary_embed, safe_filename
 from .database import Database
-from .domain import EventStatus, GuildEvent, SignupResult, SlotDefinition
+from .domain import ConfirmationResult, EventStatus, GuildEvent, SignupResult, SlotDefinition
 
 
 def build_event_embed(event: GuildEvent) -> discord.Embed:
@@ -32,18 +32,30 @@ def build_event_embed(event: GuildEvent) -> discord.Embed:
     )
 
     by_role: dict[str, list[int]] = defaultdict(list)
+    signup_by_user = {signup.user_id: signup for signup in event.signups}
     for signup in event.signups:
         by_role[signup.slot_key].append(signup.user_id)
     for slot in event.slots:
         members = by_role[slot.key]
-        names = "\n".join(f"{index}. <@{user_id}>" for index, user_id in enumerate(members, 1))
+        names = "\n".join(
+            f"{index}. <@{user_id}>"
+            + (
+                (" ✅" if signup_by_user[user_id].confirmed else " ⏳")
+                if event.activity == "crystal"
+                else ""
+            )
+            for index, user_id in enumerate(members, 1)
+        )
         build_line = f"📜 `{slot.build_name}`\n" if slot.build_name else ""
         embed.add_field(
             name=f"{slot.emoji} {slot.label} ({len(members)}/{slot.capacity})",
             value=build_line + (names or "— Disponible —"),
             inline=True,
         )
-    embed.set_footer(text=f"Evento #{event.id} · Usa los botones para elegir o cambiar tu rol")
+    footer = "Usa los botones para elegir o cambiar tu rol"
+    if event.activity == "crystal":
+        footer += " · En Liga también debes confirmar asistencia"
+    embed.set_footer(text=f"Evento #{event.id} · {footer}")
     return embed
 
 
@@ -73,11 +85,25 @@ class LeaveButton(discord.ui.Button["EventSignupView"]):
             custom_id=f"event:{event_id}:leave",
             row=row,
         )
-        self.event_id = event_id
 
     async def callback(self, interaction: discord.Interaction) -> None:
         assert self.view is not None
         await self.view.leave(interaction)
+
+
+class ConfirmButton(discord.ui.Button["EventSignupView"]):
+    def __init__(self, event_id: int, row: int) -> None:
+        super().__init__(
+            style=discord.ButtonStyle.success,
+            label="Confirmar asistencia",
+            emoji="✅",
+            custom_id=f"event:{event_id}:confirm",
+            row=row,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        assert self.view is not None
+        await self.view.confirm(interaction)
 
 
 class EventSignupView(discord.ui.View):
@@ -90,8 +116,10 @@ class EventSignupView(discord.ui.View):
         self.event_id = event.id
         for index, slot in enumerate(event.slots):
             self.add_item(RoleButton(event.id, slot, index // 5))
-        leave_row = min(len(event.slots) // 5, 4)
-        self.add_item(LeaveButton(event.id, leave_row))
+        action_row = min(len(event.slots) // 5, 4)
+        self.add_item(LeaveButton(event.id, action_row))
+        if event.activity == "crystal":
+            self.add_item(ConfirmButton(event.id, action_row))
         if event.status is not EventStatus.OPEN:
             self.disable_all()
 
@@ -119,6 +147,10 @@ class EventSignupView(discord.ui.View):
         if result in {SignupResult.JOINED, SignupResult.MOVED}:
             await self._refresh_message(interaction)
         message = messages[result]
+        if event and event.activity == "crystal" and result in {
+            SignupResult.JOINED, SignupResult.MOVED
+        }:
+            message += "\nAhora pulsa **✅ Confirmar asistencia** cuando estés seguro."
         if build_name:
             message += f"\nTu build asignada es **{build_name}**."
         await interaction.followup.send(message, ephemeral=True)
@@ -147,6 +179,18 @@ class EventSignupView(discord.ui.View):
             await self._refresh_message(interaction)
         message = "Saliste del evento." if removed else "No estabas apuntado en este evento."
         await interaction.followup.send(message, ephemeral=True)
+
+    async def confirm(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        result = self.database.confirm_signup(self.event_id, interaction.user.id)
+        messages = {
+            ConfirmationResult.CONFIRMED: "✅ Asistencia confirmada.",
+            ConfirmationResult.NOT_SIGNED_UP: "Primero elige una posición en el evento.",
+            ConfirmationResult.EVENT_CLOSED: "Las inscripciones de este evento están cerradas.",
+        }
+        if result is ConfirmationResult.CONFIRMED:
+            await self._refresh_message(interaction)
+        await interaction.followup.send(messages[result], ephemeral=True)
 
     async def _refresh_message(self, interaction: discord.Interaction) -> None:
         event = self.database.get_event(self.event_id)

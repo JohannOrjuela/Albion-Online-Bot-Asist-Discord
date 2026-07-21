@@ -19,39 +19,89 @@ def _slot(key: str, label: str, emoji: str, capacity: int) -> SlotDefinition:
 
 ACTIVITIES: dict[str, ActivityPreset] = {
     "hg": ActivityPreset(
-        "hg", "Hellgate", 0xD7263D,
-        (_slot("healer", "Healer", "💚", 1), _slot("dps", "DPS", "⚔️", 1)),
+        "hg",
+        "Hellgate 5v5",
+        0xD7263D,
+        (
+            _slot("frontline", "Frontline", "🛡️", 1),
+            _slot("healer", "Healer", "💚", 1),
+            _slot("dps", "DPS/Support", "⚔️", 3),
+        ),
     ),
     "arena": ActivityPreset(
-        "arena", "Arena de Cristal", 0x6C5CE7,
-        (_slot("tank", "Tanque", "🛡️", 1), _slot("healer", "Healer", "💚", 1),
-         _slot("dps", "DPS", "⚔️", 3)),
+        "arena",
+        "Arena de Cristal",
+        0x6C5CE7,
+        (
+            _slot("frontline", "Frontline", "🛡️", 1),
+            _slot("healer", "Healer", "💚", 1),
+            _slot("dps", "DPS/Support", "⚔️", 3),
+        ),
     ),
     "crystal": ActivityPreset(
-        "crystal", "Liga de Cristal", 0x9B59B6,
-        (_slot("tank", "Tanque", "🛡️", 1), _slot("healer", "Healer", "💚", 1),
-         _slot("support", "Soporte", "✨", 1), _slot("dps", "DPS", "⚔️", 2)),
+        "crystal",
+        "Liga de Cristal 5v5",
+        0x9B59B6,
+        (
+            _slot("titular_1", "Titular 1", "1️⃣", 1),
+            _slot("titular_2", "Titular 2", "2️⃣", 1),
+            _slot("titular_3", "Titular 3", "3️⃣", 1),
+            _slot("titular_4", "Titular 4", "4️⃣", 1),
+            _slot("titular_5", "Titular 5", "5️⃣", 1),
+            _slot("suplente", "Suplentes", "🔄", 2),
+        ),
     ),
     "avalon": ActivityPreset(
-        "avalon", "Caminos Avalonianos", 0xE74C3C,
-        (_slot("caller", "Caller", "📣", 1), _slot("offtank", "Offtank", "🛡️", 1),
-         _slot("healer", "Healer", "💚", 2), _slot("support", "Soporte", "✨", 2),
-         _slot("dps", "DPS", "⚔️", 6)),
-    ),
-    "tracking": ActivityPreset(
-        "tracking", "Rastreo", 0x27AE60,
-        (_slot("tank", "Tanque", "🛡️", 1), _slot("healer", "Healer", "💚", 1),
-         _slot("dps", "DPS", "⚔️", 3)),
+        "avalon",
+        "Caminos Avalonianos",
+        0xE74C3C,
+        (
+            _slot("caller", "Caller", "📣", 1),
+            _slot("healer", "Healer", "💚", 1),
+            _slot("support", "Soporte", "✨", 1),
+            _slot("dps", "DPS", "⚔️", 4),
+        ),
     ),
     "static": ActivityPreset(
-        "static", "Estática", 0xF39C12,
-        (_slot("tank", "Tanque", "🛡️", 1), _slot("healer", "Healer", "💚", 1),
-         _slot("support", "Soporte", "✨", 1), _slot("dps", "DPS", "⚔️", 4)),
+        "static",
+        "Estática",
+        0xF39C12,
+        (
+            _slot("puller", "Puller/Frontline", "🛡️", 1),
+            _slot("healer", "Healer", "💚", 1),
+            _slot("support", "Soporte", "✨", 1),
+            _slot("dps", "DPS", "⚔️", 4),
+        ),
     ),
     "group": ActivityPreset(
-        "group", "Mazmorra grupal", 0x3498DB,
-        (_slot("tank", "Tanque", "🛡️", 1), _slot("healer", "Healer", "💚", 1),
-         _slot("dps", "DPS", "⚔️", 3)),
+        "group",
+        "Mazmorra Grupal",
+        0x3498DB,
+        (
+            _slot("tank", "Tanque", "🛡️", 1),
+            _slot("healer", "Healer", "💚", 1),
+            _slot("dps", "DPS/Support", "⚔️", 3),
+        ),
     ),
 }
 
+
+ROAD_SLOTS: dict[str, tuple[SlotDefinition, ...]] = {
+    "pve": (
+        _slot("tank", "Tanque", "🛡️", 1),
+        _slot("healer", "Healer", "💚", 1),
+        _slot("support", "Soporte", "✨", 1),
+        _slot("dps", "DPS", "⚔️", 4),
+    ),
+    "pvp": ACTIVITIES["avalon"].slots,
+    "tracking": (
+        _slot("tracker", "Tracker", "🐾", 1),
+        _slot("healer", "Healer", "💚", 1),
+        _slot("dps", "DPS/Support", "⚔️", 5),
+    ),
+    "transport": (
+        _slot("scout", "Scout", "👁️", 1),
+        _slot("escort", "Escolta", "🛡️", 2),
+        _slot("transporter", "Transportistas", "📦", 4),
+    ),
+}

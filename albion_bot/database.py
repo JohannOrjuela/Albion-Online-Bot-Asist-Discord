@@ -10,6 +10,7 @@ from typing import Iterator
 from .domain import (
     AlbionBuild,
     CompositionTemplate,
+    ConfirmationResult,
     EventStatus,
     GuildEvent,
     Signup,
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS event_signups (
     user_id INTEGER NOT NULL,
     slot_id INTEGER NOT NULL REFERENCES event_slots(id) ON DELETE CASCADE,
     joined_at TEXT NOT NULL,
+    confirmed INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(event_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS idx_events_status ON guild_events(status, starts_at);
@@ -135,6 +137,13 @@ class Database:
                 connection.execute(
                     "ALTER TABLE event_slots ADD COLUMN build_id INTEGER REFERENCES builds(id)"
                 )
+            signup_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(event_signups)")
+            }
+            if "confirmed" not in signup_columns:
+                connection.execute(
+                    "ALTER TABLE event_signups ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0"
+                )
 
     def create_event(
         self, *, guild_id: int, channel_id: int, creator_id: int, activity: str,
@@ -213,11 +222,27 @@ class Database:
                 )
                 return SignupResult.JOINED
             connection.execute(
-                """UPDATE event_signups SET slot_id = ?, joined_at = ?
+                """UPDATE event_signups SET slot_id = ?, joined_at = ?, confirmed = 0
                    WHERE event_id = ? AND user_id = ?""",
                 (slot_row["id"], now, event_id, user_id),
             )
             return SignupResult.MOVED
+
+    def confirm_signup(self, event_id: int, user_id: int) -> ConfirmationResult:
+        with self._lock, self._connection() as connection:
+            event_row = connection.execute(
+                "SELECT status FROM guild_events WHERE id = ?", (event_id,)
+            ).fetchone()
+            if event_row is None or event_row["status"] != EventStatus.OPEN.value:
+                return ConfirmationResult.EVENT_CLOSED
+            cursor = connection.execute(
+                """UPDATE event_signups SET confirmed = 1
+                   WHERE event_id = ? AND user_id = ?""",
+                (event_id, user_id),
+            )
+            if cursor.rowcount == 0:
+                return ConfirmationResult.NOT_SIGNED_UP
+            return ConfirmationResult.CONFIRMED
 
     def leave_event(self, event_id: int, user_id: int) -> bool:
         with self._lock, self._connection() as connection:
@@ -241,7 +266,7 @@ class Database:
                 (event_id,),
             ).fetchall()
             signup_rows = connection.execute(
-                """SELECT es.user_id, es.joined_at, s.role_key
+                """SELECT es.user_id, es.joined_at, es.confirmed, s.role_key
                    FROM event_signups es JOIN event_slots s ON s.id = es.slot_id
                    WHERE es.event_id = ? ORDER BY es.joined_at""",
                 (event_id,),
@@ -262,7 +287,10 @@ class Database:
                 for row in slot_rows
             ),
             signups=tuple(
-                Signup(row["user_id"], row["role_key"], datetime.fromisoformat(row["joined_at"]))
+                Signup(
+                    row["user_id"], row["role_key"],
+                    datetime.fromisoformat(row["joined_at"]), bool(row["confirmed"]),
+                )
                 for row in signup_rows
             ),
         )

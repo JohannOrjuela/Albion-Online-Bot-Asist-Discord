@@ -39,11 +39,14 @@ class AlbionGuildBot(commands.Bot):
                     message_id=event.message_id,
                 )
 
-        if self.settings.guild_id:
-            guild = discord.Object(id=self.settings.guild_id)
-            self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            LOGGER.info("Sincronizados %s comandos en el servidor de desarrollo.", len(synced))
+        if self.settings.sync_guild_ids:
+            for guild_id in self.settings.sync_guild_ids:
+                guild = discord.Object(id=guild_id)
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                LOGGER.info(
+                    "Sincronizados %s comandos en el servidor %s.", len(synced), guild_id
+                )
         else:
             synced = await self.tree.sync()
             LOGGER.info("Sincronizados %s comandos globales.", len(synced))

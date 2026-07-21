@@ -38,7 +38,10 @@ class DiscordIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(group)
         self.assertEqual(
             {command.name for command in group.commands},
-            {"crear", "cerrar", "desde-plantilla"},
+            {
+                "hellgate", "arena", "liga", "caminos", "estatica", "grupal",
+                "cerrar", "desde-plantilla",
+            },
         )
         self.assertEqual(
             {command.name for command in self.bot.tree.get_commands()},

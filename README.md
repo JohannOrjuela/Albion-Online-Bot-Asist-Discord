@@ -49,6 +49,14 @@ DATABASE_PATH=data/albion_guild_bot.db
 
 `DISCORD_GUILD_ID` hace que los comandos aparezcan inmediatamente durante el desarrollo.
 
+Para usar el bot simultáneamente en el gremio y en la alianza, agrega ambos IDs:
+
+```env
+DISCORD_GUILD_IDS=123456789012345678,987654321098765432
+```
+
+Cuando uses `DISCORD_GUILD_IDS`, puedes dejar vacío `DISCORD_GUILD_ID`.
+
 ## 4. Ejecutar
 
 ```powershell
@@ -63,18 +71,27 @@ conectado a la corriente.
 
 ### Crear un evento
 
-```text
-/evento crear actividad:Caminos Avalonianos fecha:25/07/2026 20:00
-```
-
-Opcionalmente puedes escribir cupos personalizados:
+Cada actividad tiene su propio comando y un título fijo:
 
 ```text
-caller:1, offtank:1, healer:2, soporte:2, dps:6
+/evento hellgate
+/evento arena
+/evento liga
+/evento caminos
+/evento estatica
+/evento grupal
 ```
+
+Discord muestra solamente los campos de esa actividad. La descripción continúa siendo
+libre. También se puede indicar una plantilla opcional para aplicar sus posiciones,
+builds y emojis. Cofres y Rastreo en Caminos tienen un máximo de siete participantes.
 
 La fecha se interpreta en `BOT_TIMEZONE`; Discord la muestra automáticamente en la zona
 horaria de cada miembro. Crear eventos requiere **Gestionar servidor**.
+
+En Liga de Cristal se publican cinco posiciones titulares y dos cupos de suplente. Después
+de elegir posición, cada participante debe pulsar **✅ Confirmar asistencia**. El panel
+muestra `⏳` mientras esté pendiente y `✅` cuando esté confirmado.
 
 ### Cerrar inscripciones
 

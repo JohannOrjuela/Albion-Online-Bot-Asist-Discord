@@ -6,21 +6,65 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from .activities import ACTIVITIES
+from .activities import ACTIVITIES, ROAD_SLOTS
 from .database import Database
 from .domain import EventStatus, SlotDefinition
-from .parsing import parse_local_datetime, parse_slots
+from .parsing import parse_local_datetime
 from .views import EventSignupView, build_event_embed
 
 
-ACTIVITY_CHOICES = [
-    app_commands.Choice(name=preset.label, value=preset.key)
-    for preset in ACTIVITIES.values()
+TITLES = {
+    "hg": "🔥 Hellgate 5v5",
+    "arena": "💎 Arena de Cristal",
+    "crystal": "🏆 Liga de Cristal 5v5",
+    "avalon": "🌀 Caminos Avalonianos",
+    "static": "🏛️ Estática",
+    "group": "🗝️ Mazmorra Grupal",
+}
+
+TIER_CHOICES = [app_commands.Choice(name=f"Tier {tier}", value=f"T{tier}") for tier in range(4, 9)]
+LETHAL_CHOICES = [
+    app_commands.Choice(name="Letal", value="Letal"),
+    app_commands.Choice(name="No letal", value="No letal"),
+]
+RANK_CHOICES = [
+    app_commands.Choice(name=rank, value=rank)
+    for rank in ("Hierro", "Bronce", "Plata", "Oro", "Cristal")
+]
+ROAD_OBJECTIVES = [
+    app_commands.Choice(name="Cofres / PvE", value="pve"),
+    app_commands.Choice(name="Roaming PvP", value="pvp"),
+    app_commands.Choice(name="Rastreo", value="tracking"),
+    app_commands.Choice(name="Transporte", value="transport"),
+]
+ROAD_LABELS = {choice.value: choice.name for choice in ROAD_OBJECTIVES}
+STATIC_MODES = [
+    app_commands.Choice(name="Fame farm", value="Fame farm"),
+    app_commands.Choice(name="Pull grande", value="Pull grande"),
+    app_commands.Choice(name="Facción", value="Facción"),
+    app_commands.Choice(name="Fama y PvP", value="Fama y PvP"),
+]
+SET_TYPES = [
+    app_commands.Choice(name="Set de fama", value="Set de fama"),
+    app_commands.Choice(name="Set de combate", value="Set de combate"),
+]
+ENCHANTMENTS = [
+    app_commands.Choice(name=f".{level}", value=f".{level}") for level in range(5)
 ]
 
 
+def _description(notes: str | None, details: tuple[tuple[str, str], ...]) -> str:
+    parts: list[str] = []
+    if notes and notes.strip():
+        parts.append(notes.strip())
+    parts.append("**Detalles del evento**\n" + "\n".join(
+        f"• **{label}:** {value}" for label, value in details
+    ))
+    return "\n\n".join(parts)[:2000]
+
+
 class EventsCog(commands.Cog):
-    event_group = app_commands.Group(name="evento", description="Gestiona actividades del gremio")
+    event_group = app_commands.Group(name="evento", description="Crea contenido para la alianza")
 
     def __init__(self, bot: commands.Bot, database: Database) -> None:
         self.bot = bot
@@ -38,37 +82,42 @@ class EventsCog(commands.Cog):
             for slot in slots
         )
 
-    @event_group.command(name="crear", description="Publica un evento con inscripciones por rol")
-    @app_commands.guild_only()
-    @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.choices(actividad=ACTIVITY_CHOICES)
-    @app_commands.describe(
-        actividad="Tipo de actividad",
-        fecha="Hora de Colombia: 20/07/2026 15:30",
-        titulo="Nombre personalizado; si se omite se usa la actividad",
-        descripcion="Información como mapas, IP mínimo o requisitos",
-        cupos="Opcional: caller:1, healer:2, dps:6",
-    )
-    async def create_event(
+    def _template_slots(
+        self,
+        guild_id: int,
+        activity: str,
+        template_name: str | None,
+        default: tuple[SlotDefinition, ...],
+    ) -> tuple[SlotDefinition, ...]:
+        if not template_name:
+            return self._guild_emojis(guild_id, default)
+        template = self.database.get_template(guild_id, template_name)
+        if template is None:
+            raise ValueError("No encontré esa plantilla.")
+        if template.activity != activity:
+            raise ValueError("La plantilla pertenece a otra actividad.")
+        if not template.slots:
+            raise ValueError("La plantilla no tiene posiciones configuradas.")
+        return template.slots
+
+    async def _publish(
         self,
         interaction: discord.Interaction,
-        actividad: app_commands.Choice[str],
-        fecha: str,
-        titulo: str | None = None,
-        descripcion: str | None = None,
-        cupos: str | None = None,
+        *,
+        activity: str,
+        date_text: str,
+        description: str,
+        slots: tuple[SlotDefinition, ...],
     ) -> None:
         if interaction.guild_id is None or interaction.channel_id is None:
-            await interaction.response.send_message("Este comando solo funciona en un servidor.", ephemeral=True)
+            await interaction.response.send_message(
+                "Este comando solo funciona en un servidor.", ephemeral=True
+            )
             return
         try:
-            starts_at = parse_local_datetime(fecha, self.bot.settings.timezone)  # type: ignore[attr-defined]
+            starts_at = parse_local_datetime(date_text, self.bot.settings.timezone)  # type: ignore[attr-defined]
             if starts_at <= datetime.now(timezone.utc):
                 raise ValueError("La fecha del evento debe estar en el futuro.")
-            preset = ACTIVITIES[actividad.value]
-            slots = self._guild_emojis(
-                interaction.guild_id, parse_slots(cupos) if cupos else preset.slots
-            )
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
@@ -78,9 +127,9 @@ class EventsCog(commands.Cog):
             guild_id=interaction.guild_id,
             channel_id=interaction.channel_id,
             creator_id=interaction.user.id,
-            activity=actividad.value,
-            title=(titulo or preset.label).strip()[:256],
-            description=(descripcion or "").strip()[:2000],
+            activity=activity,
+            title=TITLES[activity],
+            description=description,
             starts_at=starts_at,
             slots=slots,
         )
@@ -100,69 +149,226 @@ class EventsCog(commands.Cog):
         self.bot.add_view(view, message_id=message.id)
         await interaction.followup.send(f"Evento creado: {message.jump_url}", ephemeral=True)
 
-    @event_group.command(
-        name="desde-plantilla", description="Crea un evento usando una composición guardada"
+    @event_group.command(name="hellgate", description="Crea una Hellgate 5v5")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(letalidad=LETHAL_CHOICES, tier=TIER_CHOICES)
+    @app_commands.describe(
+        fecha="Hora de Colombia: 25/07/2026 20:00",
+        sets="Número de sets obligatorios por jugador",
+        punto="Ciudad o punto de reunión",
+        plantilla="Plantilla opcional con posiciones y builds",
+        descripcion="Texto libre del organizador",
     )
+    async def hellgate(
+        self, interaction: discord.Interaction, fecha: str,
+        letalidad: app_commands.Choice[str], tier: app_commands.Choice[str],
+        sets: app_commands.Range[int, 1, 10], punto: str,
+        plantilla: str | None = None, descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "hg", plantilla, ACTIVITIES["hg"].slots
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="hg", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Modalidad", letalidad.value), ("Tier mínimo", tier.value),
+                ("Sets obligatorios", str(sets)), ("Punto de reunión", punto),
+            )),
+        )
+
+    @event_group.command(name="arena", description="Crea una Arena de Cristal 5v5")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(rango=RANK_CHOICES, tier=TIER_CHOICES)
+    @app_commands.describe(
+        rango="Rango objetivo del grupo", tier="Tier mínimo requerido",
+        composicion="Composición; se usa la recomendada si se omite",
+        plantilla="Plantilla opcional con posiciones y builds",
+        descripcion="Texto libre del organizador",
+    )
+    async def arena(
+        self, interaction: discord.Interaction, fecha: str,
+        rango: app_commands.Choice[str], tier: app_commands.Choice[str],
+        composicion: str = "1 Healer · 1 Frontline · 3 DPS/Support",
+        plantilla: str | None = None, descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "arena", plantilla, ACTIVITIES["arena"].slots
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="arena", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Rango objetivo", rango.value), ("Tier mínimo", tier.value),
+                ("Composición", composicion),
+            )),
+        )
+
+    @event_group.command(name="liga", description="Crea una Liga de Cristal 5v5")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(letalidad=LETHAL_CHOICES, tier=TIER_CHOICES)
+    @app_commands.describe(
+        nivel_token="Nivel o token de la partida", horario_oficial="Horario oficial indicado",
+        plantilla="Plantilla opcional; úsala para asignar una build a cada posición",
+        descripcion="Texto libre del organizador",
+    )
+    async def league(
+        self, interaction: discord.Interaction, fecha: str, nivel_token: str,
+        letalidad: app_commands.Choice[str], tier: app_commands.Choice[str],
+        horario_oficial: str, plantilla: str | None = None,
+        descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "crystal", plantilla, ACTIVITIES["crystal"].slots
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="crystal", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Modalidad", "5v5"), ("Nivel / token", nivel_token),
+                ("Riesgo", letalidad.value), ("Tier mínimo", tier.value),
+                ("Horario oficial", horario_oficial),
+                ("Equipo", "5 titulares · hasta 2 suplentes"),
+            )),
+        )
+
+    @event_group.command(name="caminos", description="Crea contenido en Caminos Avalonianos")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(objetivo=ROAD_OBJECTIVES, tier=TIER_CHOICES)
+    @app_commands.describe(
+        objetivo="Actividad principal", punto="Entrada o punto de reunión",
+        loot_split="Cómo se reparten costes y botín",
+        plantilla="Plantilla opcional con posiciones y builds",
+        descripcion="Texto libre del organizador",
+    )
+    async def roads(
+        self, interaction: discord.Interaction, fecha: str,
+        objetivo: app_commands.Choice[str], tier: app_commands.Choice[str],
+        punto: str, loot_split: str, plantilla: str | None = None,
+        descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "avalon", plantilla, ROAD_SLOTS[objetivo.value]
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="avalon", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Objetivo", ROAD_LABELS[objetivo.value]), ("Tier mínimo", tier.value),
+                ("Punto de reunión", punto), ("Loot split", loot_split),
+                ("Tamaño máximo", "7 jugadores"),
+            )),
+        )
+
+    @event_group.command(name="estatica", description="Crea una salida de Estática")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(modalidad=STATIC_MODES, tipo_set=SET_TYPES)
+    @app_commands.describe(
+        tier_zona="Tier y nombre de la zona", tipo_set="Set de fama o combate",
+        punto="Punto de reunión", plantilla="Plantilla opcional con posiciones y builds",
+        descripcion="Texto libre del organizador",
+    )
+    async def static(
+        self, interaction: discord.Interaction, fecha: str,
+        modalidad: app_commands.Choice[str], tier_zona: str,
+        tipo_set: app_commands.Choice[str], punto: str,
+        plantilla: str | None = None, descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "static", plantilla, ACTIVITIES["static"].slots
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="static", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Modalidad", modalidad.value), ("Tier y zona", tier_zona),
+                ("Equipamiento", tipo_set.value), ("Punto de reunión", punto),
+            )),
+        )
+
+    @event_group.command(name="grupal", description="Crea una Mazmorra Grupal")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.choices(tier=TIER_CHOICES, encantamiento=ENCHANTMENTS)
+    @app_commands.describe(
+        mapas="Número de mapas que harán", reparto="Repartición del coste y del loot",
+        plantilla="Plantilla opcional con posiciones y builds",
+        descripcion="Texto libre del organizador",
+    )
+    async def group_dungeon(
+        self, interaction: discord.Interaction, fecha: str,
+        tier: app_commands.Choice[str], encantamiento: app_commands.Choice[str],
+        mapas: app_commands.Range[int, 1, 50], reparto: str,
+        plantilla: str | None = None, descripcion: str | None = None,
+    ) -> None:
+        try:
+            slots = self._template_slots(
+                interaction.guild_id or 0, "group", plantilla, ACTIVITIES["group"].slots
+            )
+        except ValueError as exc:
+            await interaction.response.send_message(str(exc), ephemeral=True)
+            return
+        await self._publish(
+            interaction, activity="group", date_text=fecha, slots=slots,
+            description=_description(descripcion, (
+                ("Mapa", f"{tier.value}{encantamiento.value}"),
+                ("Número de mapas", str(mapas)), ("Coste y loot", reparto),
+            )),
+        )
+
+    @event_group.command(name="desde-plantilla", description="Crea un evento desde una plantilla")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
-        plantilla="Nombre exacto de la plantilla",
-        fecha="Hora de Colombia: 20/07/2026 15:30",
-        titulo="Título opcional del evento",
+        plantilla="Nombre exacto de la plantilla", fecha="Hora de Colombia: 25/07/2026 20:00",
         descripcion="Información adicional para esta salida",
     )
     async def create_from_template(
-        self,
-        interaction: discord.Interaction,
-        plantilla: str,
-        fecha: str,
-        titulo: str | None = None,
-        descripcion: str | None = None,
+        self, interaction: discord.Interaction, plantilla: str,
+        fecha: str, descripcion: str | None = None,
     ) -> None:
-        assert interaction.guild_id is not None and interaction.channel_id is not None
+        if interaction.guild_id is None:
+            await interaction.response.send_message("Este comando solo funciona en un servidor.", ephemeral=True)
+            return
         template = self.database.get_template(interaction.guild_id, plantilla)
         if template is None:
             await interaction.response.send_message("No encontré esa plantilla.", ephemeral=True)
             return
+        if template.activity not in TITLES:
+            await interaction.response.send_message(
+                "Esa actividad ya no está disponible para eventos nuevos.", ephemeral=True
+            )
+            return
         if not template.slots:
             await interaction.response.send_message(
-                "La plantilla no tiene roles. Añádelos con `/plantilla rol`.", ephemeral=True
+                "La plantilla no tiene posiciones. Añádelas con `/plantilla rol`.", ephemeral=True
             )
             return
-        try:
-            starts_at = parse_local_datetime(fecha, self.bot.settings.timezone)  # type: ignore[attr-defined]
-            if starts_at <= datetime.now(timezone.utc):
-                raise ValueError("La fecha del evento debe estar en el futuro.")
-        except ValueError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
-            return
-        await interaction.response.defer(ephemeral=True)
-        event = self.database.create_event(
-            guild_id=interaction.guild_id, channel_id=interaction.channel_id,
-            creator_id=interaction.user.id, activity=template.activity,
-            title=(titulo or template.name).strip()[:256],
+        await self._publish(
+            interaction, activity=template.activity, date_text=fecha,
             description=(descripcion or template.description).strip()[:2000],
-            starts_at=starts_at, slots=template.slots,
+            slots=template.slots,
         )
-        view = EventSignupView(self.database, event, self.bot.build_renderer)  # type: ignore[attr-defined]
-        try:
-            assert interaction.channel is not None
-            message = await interaction.channel.send(
-                content="@everyone",
-                embed=build_event_embed(event),
-                view=view,
-                allowed_mentions=discord.AllowedMentions(everyone=True),
-            )
-        except discord.Forbidden:
-            self.database.set_event_status(event.id, EventStatus.CANCELLED)
-            await interaction.followup.send(
-                "No puedo publicar en este canal. Necesito **Ver canal**, "
-                "**Enviar mensajes** e **Insertar enlaces**.", ephemeral=True,
-            )
-            return
-        self.database.set_event_message(event.id, message.id)
-        self.bot.add_view(view, message_id=message.id)
-        await interaction.followup.send(f"Evento creado: {message.jump_url}", ephemeral=True)
 
     @create_from_template.autocomplete("plantilla")
     async def template_name_autocomplete(
@@ -174,7 +380,7 @@ class EventsCog(commands.Cog):
         return [
             app_commands.Choice(name=template.name, value=template.name)
             for template in self.database.list_templates(interaction.guild_id)
-            if needle in template.name.casefold()
+            if needle in template.name.casefold() and template.activity in TITLES
         ][:25]
 
     @event_group.command(name="cerrar", description="Cierra las inscripciones de un evento")
@@ -206,37 +412,25 @@ class EventsCog(commands.Cog):
             except discord.HTTPException:
                 pass
 
-    @create_event.error
-    async def create_event_error(
+    async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ) -> None:
         original = error.original if isinstance(error, app_commands.CommandInvokeError) else error
         if isinstance(error, app_commands.MissingPermissions):
             message = "Necesitas el permiso **Gestionar servidor** para crear eventos."
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
-            return
-        if isinstance(original, discord.Forbidden):
+        elif isinstance(original, discord.Forbidden):
             message = (
-                "No puedo publicar el evento en este canal. Revisa que mi rol tenga "
-                "**Ver canal**, **Enviar mensajes** e **Insertar enlaces** en los permisos "
-                "del canal o de su categoría."
+                "No puedo publicar en este canal. Necesito **Ver canal**, "
+                "**Enviar mensajes** e **Insertar enlaces**."
             )
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
-            return
-        if isinstance(original, discord.HTTPException):
-            message = "Discord rechazó la publicación del evento. Inténtalo nuevamente en otro canal."
-            if interaction.response.is_done():
-                await interaction.followup.send(message, ephemeral=True)
-            else:
-                await interaction.response.send_message(message, ephemeral=True)
-            return
-        raise error
+        elif isinstance(original, discord.HTTPException):
+            message = "Discord rechazó la publicación. Inténtalo nuevamente en otro canal."
+        else:
+            raise error
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from albion_bot.database import Database
-from albion_bot.domain import EventStatus, SignupResult, SlotDefinition
+from albion_bot.domain import ConfirmationResult, EventStatus, SignupResult, SlotDefinition
 
 
 class DatabaseTests(unittest.TestCase):
@@ -47,6 +47,26 @@ class DatabaseTests(unittest.TestCase):
         self.database.set_event_status(self.event.id, EventStatus.CLOSED)
         result = self.database.signup(self.event.id, 10, "dps")
         self.assertEqual(result, SignupResult.EVENT_CLOSED)
+
+    def test_signup_can_be_confirmed(self) -> None:
+        self.assertEqual(
+            self.database.confirm_signup(self.event.id, 10),
+            ConfirmationResult.NOT_SIGNED_UP,
+        )
+        self.database.signup(self.event.id, 10, "dps")
+        self.assertEqual(
+            self.database.confirm_signup(self.event.id, 10),
+            ConfirmationResult.CONFIRMED,
+        )
+        loaded = self.database.get_event(self.event.id)
+        self.assertTrue(loaded.signups[0].confirmed)  # type: ignore[union-attr]
+
+    def test_changing_position_resets_confirmation(self) -> None:
+        self.database.signup(self.event.id, 10, "dps")
+        self.database.confirm_signup(self.event.id, 10)
+        self.database.signup(self.event.id, 10, "tank")
+        loaded = self.database.get_event(self.event.id)
+        self.assertFalse(loaded.signups[0].confirmed)  # type: ignore[union-attr]
 
     def test_build_can_be_assigned_to_template(self) -> None:
         build = self.database.save_build(

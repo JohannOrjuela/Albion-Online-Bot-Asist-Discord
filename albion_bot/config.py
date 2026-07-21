@@ -19,6 +19,13 @@ class Settings:
     timezone: ZoneInfo
     database_path: Path
     log_level: str
+    guild_ids: tuple[int, ...] = ()
+
+    @property
+    def sync_guild_ids(self) -> tuple[int, ...]:
+        if self.guild_ids:
+            return self.guild_ids
+        return (self.guild_id,) if self.guild_id is not None else ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -31,10 +38,20 @@ class Settings:
             )
 
         raw_guild_id = os.getenv("DISCORD_GUILD_ID", "").strip()
+        raw_guild_ids = os.getenv("DISCORD_GUILD_IDS", "").strip()
         try:
-            guild_id = int(raw_guild_id) if raw_guild_id else None
+            guild_ids = tuple(
+                dict.fromkeys(
+                    int(value.strip())
+                    for value in (raw_guild_ids or raw_guild_id).split(",")
+                    if value.strip()
+                )
+            )
+            guild_id = guild_ids[0] if guild_ids else None
         except ValueError as exc:
-            raise ConfigError("DISCORD_GUILD_ID debe ser un número entero.") from exc
+            raise ConfigError(
+                "DISCORD_GUILD_IDS debe contener identificadores separados por comas."
+            ) from exc
 
         timezone_name = os.getenv("BOT_TIMEZONE", "America/Bogota").strip()
         try:
@@ -48,5 +65,4 @@ class Settings:
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
         log_level = os.getenv("LOG_LEVEL", "INFO").strip().upper()
-        return cls(token, guild_id, timezone, database_path, log_level)
-
+        return cls(token, guild_id, timezone, database_path, log_level, guild_ids)

@@ -26,6 +26,7 @@ class Signup:
     user_id: int
     slot_key: str
     joined_at: datetime
+    confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,12 @@ class SignupResult(StrEnum):
     FULL = "full"
     EVENT_CLOSED = "event_closed"
     SLOT_NOT_FOUND = "slot_not_found"
+
+
+class ConfirmationResult(StrEnum):
+    CONFIRMED = "confirmed"
+    NOT_SIGNED_UP = "not_signed_up"
+    EVENT_CLOSED = "event_closed"
 
 
 @dataclass(frozen=True, slots=True)
