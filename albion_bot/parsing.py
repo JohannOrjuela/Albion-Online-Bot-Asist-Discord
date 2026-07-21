@@ -30,6 +30,17 @@ def parse_local_datetime(value: str, local_timezone: ZoneInfo) -> datetime:
     raise ValueError("Usa una fecha como `20/07/2026 15:30` o `2026-07-20 15:30`.")
 
 
+def parse_game_time(value: str, now: datetime | None = None) -> datetime:
+    """Convierte una hora del juego (UTC) en una fecha UTC para hoy."""
+    cleaned = value.strip()
+    try:
+        parsed_time = datetime.strptime(cleaned, "%H:%M").time()
+    except ValueError as exc:
+        raise ValueError("Usa la hora UTC del juego en formato `18:45`.") from exc
+    utc_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return datetime.combine(utc_now.date(), parsed_time, tzinfo=timezone.utc)
+
+
 def parse_slots(value: str) -> tuple[SlotDefinition, ...]:
     if not value.strip():
         raise ValueError("La lista de cupos está vacía.")

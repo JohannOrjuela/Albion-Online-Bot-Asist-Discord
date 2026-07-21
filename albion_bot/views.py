@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import timezone
 
 import discord
 
@@ -25,9 +26,14 @@ def build_event_embed(event: GuildEvent) -> discord.Embed:
     embed.add_field(name="Actividad", value=preset.label if preset else event.activity, inline=True)
     embed.add_field(name="Organiza", value=f"<@{event.creator_id}>", inline=True)
     embed.add_field(name="Estado", value=state, inline=True)
+    game_time = event.starts_at.astimezone(timezone.utc).strftime("%H:%M")
     embed.add_field(
-        name="Fecha y hora",
-        value=f"📅 <t:{timestamp}:F>\n⏳ <t:{timestamp}:R>",
+        name="Hora",
+        value=(
+            f"🌐 Juego: **{game_time} UTC**\n"
+            f"🕒 Tu hora: <t:{timestamp}:t>\n"
+            f"⏳ <t:{timestamp}:R>"
+        ),
         inline=False,
     )
 

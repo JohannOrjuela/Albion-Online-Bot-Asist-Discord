@@ -86,8 +86,9 @@ Discord muestra solamente los campos de esa actividad. La descripción continúa
 libre. También se puede indicar una plantilla opcional para aplicar sus posiciones,
 builds y emojis. Cofres y Rastreo en Caminos tienen un máximo de siete participantes.
 
-La fecha se interpreta en `BOT_TIMEZONE`; Discord la muestra automáticamente en la zona
-horaria de cada miembro. Crear eventos requiere **Gestionar servidor**.
+Solo se escribe la hora UTC que aparece dentro de Albion, por ejemplo `18:45`. El evento
+se crea para hoy y Discord muestra automáticamente la hora local de cada miembro y el
+tiempo restante. Crear eventos requiere **Gestionar servidor**.
 
 En Liga de Cristal se publican cinco posiciones titulares y dos cupos de suplente. Después
 de elegir posición, cada participante debe pulsar **✅ Confirmar asistencia**. El panel
@@ -137,7 +138,7 @@ Flujo recomendado:
 Después crea una salida sin volver a escribir la composición:
 
 ```text
-/evento desde-plantilla plantilla:Arena Principal fecha:25/07/2026 20:00
+/evento desde-plantilla plantilla:Arena Principal hora:20:00
 ```
 
 El panel mostrará la build asignada bajo cada rol. Al apuntarse, el jugador recibe

@@ -9,7 +9,7 @@ from discord.ext import commands
 from .activities import ACTIVITIES, ROAD_SLOTS
 from .database import Database
 from .domain import EventStatus, SlotDefinition
-from .parsing import parse_local_datetime
+from .parsing import parse_game_time
 from .views import EventSignupView, build_event_embed
 
 
@@ -105,7 +105,7 @@ class EventsCog(commands.Cog):
         interaction: discord.Interaction,
         *,
         activity: str,
-        date_text: str,
+        time_text: str,
         description: str,
         slots: tuple[SlotDefinition, ...],
     ) -> None:
@@ -115,9 +115,9 @@ class EventsCog(commands.Cog):
             )
             return
         try:
-            starts_at = parse_local_datetime(date_text, self.bot.settings.timezone)  # type: ignore[attr-defined]
+            starts_at = parse_game_time(time_text)
             if starts_at <= datetime.now(timezone.utc):
-                raise ValueError("La fecha del evento debe estar en el futuro.")
+                raise ValueError("Esa hora UTC ya pasó hoy. Indica una hora posterior.")
         except ValueError as exc:
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
@@ -154,14 +154,14 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(letalidad=LETHAL_CHOICES, tier=TIER_CHOICES)
     @app_commands.describe(
-        fecha="Hora de Colombia: 25/07/2026 20:00",
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         sets="Número de sets obligatorios por jugador",
         punto="Ciudad o punto de reunión",
         plantilla="Plantilla opcional con posiciones y builds",
         descripcion="Texto libre del organizador",
     )
     async def hellgate(
-        self, interaction: discord.Interaction, fecha: str,
+        self, interaction: discord.Interaction, hora: str,
         letalidad: app_commands.Choice[str], tier: app_commands.Choice[str],
         sets: app_commands.Range[int, 1, 10], punto: str,
         plantilla: str | None = None, descripcion: str | None = None,
@@ -174,7 +174,7 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="hg", date_text=fecha, slots=slots,
+            interaction, activity="hg", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Modalidad", letalidad.value), ("Tier mínimo", tier.value),
                 ("Sets obligatorios", str(sets)), ("Punto de reunión", punto),
@@ -186,13 +186,14 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(rango=RANK_CHOICES, tier=TIER_CHOICES)
     @app_commands.describe(
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         rango="Rango objetivo del grupo", tier="Tier mínimo requerido",
         composicion="Composición; se usa la recomendada si se omite",
         plantilla="Plantilla opcional con posiciones y builds",
         descripcion="Texto libre del organizador",
     )
     async def arena(
-        self, interaction: discord.Interaction, fecha: str,
+        self, interaction: discord.Interaction, hora: str,
         rango: app_commands.Choice[str], tier: app_commands.Choice[str],
         composicion: str = "1 Healer · 1 Frontline · 3 DPS/Support",
         plantilla: str | None = None, descripcion: str | None = None,
@@ -205,7 +206,7 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="arena", date_text=fecha, slots=slots,
+            interaction, activity="arena", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Rango objetivo", rango.value), ("Tier mínimo", tier.value),
                 ("Composición", composicion),
@@ -217,15 +218,15 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(letalidad=LETHAL_CHOICES, tier=TIER_CHOICES)
     @app_commands.describe(
-        nivel_token="Nivel o token de la partida", horario_oficial="Horario oficial indicado",
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
+        nivel_token="Nivel o token de la partida",
         plantilla="Plantilla opcional; úsala para asignar una build a cada posición",
         descripcion="Texto libre del organizador",
     )
     async def league(
-        self, interaction: discord.Interaction, fecha: str, nivel_token: str,
+        self, interaction: discord.Interaction, hora: str, nivel_token: str,
         letalidad: app_commands.Choice[str], tier: app_commands.Choice[str],
-        horario_oficial: str, plantilla: str | None = None,
-        descripcion: str | None = None,
+        plantilla: str | None = None, descripcion: str | None = None,
     ) -> None:
         try:
             slots = self._template_slots(
@@ -235,11 +236,10 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="crystal", date_text=fecha, slots=slots,
+            interaction, activity="crystal", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Modalidad", "5v5"), ("Nivel / token", nivel_token),
                 ("Riesgo", letalidad.value), ("Tier mínimo", tier.value),
-                ("Horario oficial", horario_oficial),
                 ("Equipo", "5 titulares · hasta 2 suplentes"),
             )),
         )
@@ -249,13 +249,14 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(objetivo=ROAD_OBJECTIVES, tier=TIER_CHOICES)
     @app_commands.describe(
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         objetivo="Actividad principal", punto="Entrada o punto de reunión",
         loot_split="Cómo se reparten costes y botín",
         plantilla="Plantilla opcional con posiciones y builds",
         descripcion="Texto libre del organizador",
     )
     async def roads(
-        self, interaction: discord.Interaction, fecha: str,
+        self, interaction: discord.Interaction, hora: str,
         objetivo: app_commands.Choice[str], tier: app_commands.Choice[str],
         punto: str, loot_split: str, plantilla: str | None = None,
         descripcion: str | None = None,
@@ -268,7 +269,7 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="avalon", date_text=fecha, slots=slots,
+            interaction, activity="avalon", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Objetivo", ROAD_LABELS[objetivo.value]), ("Tier mínimo", tier.value),
                 ("Punto de reunión", punto), ("Loot split", loot_split),
@@ -281,12 +282,13 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(modalidad=STATIC_MODES, tipo_set=SET_TYPES)
     @app_commands.describe(
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         tier_zona="Tier y nombre de la zona", tipo_set="Set de fama o combate",
         punto="Punto de reunión", plantilla="Plantilla opcional con posiciones y builds",
         descripcion="Texto libre del organizador",
     )
     async def static(
-        self, interaction: discord.Interaction, fecha: str,
+        self, interaction: discord.Interaction, hora: str,
         modalidad: app_commands.Choice[str], tier_zona: str,
         tipo_set: app_commands.Choice[str], punto: str,
         plantilla: str | None = None, descripcion: str | None = None,
@@ -299,7 +301,7 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="static", date_text=fecha, slots=slots,
+            interaction, activity="static", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Modalidad", modalidad.value), ("Tier y zona", tier_zona),
                 ("Equipamiento", tipo_set.value), ("Punto de reunión", punto),
@@ -311,12 +313,13 @@ class EventsCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(tier=TIER_CHOICES, encantamiento=ENCHANTMENTS)
     @app_commands.describe(
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         mapas="Número de mapas que harán", reparto="Repartición del coste y del loot",
         plantilla="Plantilla opcional con posiciones y builds",
         descripcion="Texto libre del organizador",
     )
     async def group_dungeon(
-        self, interaction: discord.Interaction, fecha: str,
+        self, interaction: discord.Interaction, hora: str,
         tier: app_commands.Choice[str], encantamiento: app_commands.Choice[str],
         mapas: app_commands.Range[int, 1, 50], reparto: str,
         plantilla: str | None = None, descripcion: str | None = None,
@@ -329,7 +332,7 @@ class EventsCog(commands.Cog):
             await interaction.response.send_message(str(exc), ephemeral=True)
             return
         await self._publish(
-            interaction, activity="group", date_text=fecha, slots=slots,
+            interaction, activity="group", time_text=hora, slots=slots,
             description=_description(descripcion, (
                 ("Mapa", f"{tier.value}{encantamiento.value}"),
                 ("Número de mapas", str(mapas)), ("Coste y loot", reparto),
@@ -340,12 +343,13 @@ class EventsCog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.describe(
-        plantilla="Nombre exacto de la plantilla", fecha="Hora de Colombia: 25/07/2026 20:00",
+        plantilla="Nombre exacto de la plantilla",
+        hora="Hora UTC del juego para hoy, por ejemplo 18:45",
         descripcion="Información adicional para esta salida",
     )
     async def create_from_template(
         self, interaction: discord.Interaction, plantilla: str,
-        fecha: str, descripcion: str | None = None,
+        hora: str, descripcion: str | None = None,
     ) -> None:
         if interaction.guild_id is None:
             await interaction.response.send_message("Este comando solo funciona en un servidor.", ephemeral=True)
@@ -365,7 +369,7 @@ class EventsCog(commands.Cog):
             )
             return
         await self._publish(
-            interaction, activity=template.activity, date_text=fecha,
+            interaction, activity=template.activity, time_text=hora,
             description=(descripcion or template.description).strip()[:2000],
             slots=template.slots,
         )
