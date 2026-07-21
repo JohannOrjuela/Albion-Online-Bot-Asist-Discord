@@ -16,14 +16,14 @@ from .domain import AlbionBuild
 RENDER_BASE_URL = "https://render.albiononline.com/v1/item"
 CANVAS_SIZE = (1600, 900)
 SLOT_POSITIONS = {
-    "Arma": (285, 190),
-    "Mano secundaria": (75, 260),
-    "Casco": (285, 25),
-    "Pechera": (285, 365),
-    "Botas": (285, 585),
-    "Capa": (495, 260),
-    "Comida": (495, 585),
-    "Poción": (75, 585),
+    "Mano secundaria": (75, 185),
+    "Casco": (285, 185),
+    "Capa": (495, 185),
+    "Arma": (75, 400),
+    "Pechera": (285, 400),
+    "Poción": (75, 615),
+    "Botas": (285, 615),
+    "Comida": (495, 615),
 }
 
 
@@ -88,7 +88,7 @@ class BuildRenderer:
     def _compose(self, build: AlbionBuild, icons: dict[str, Image.Image]) -> Image.Image:
         canvas = Image.new("RGB", CANVAS_SIZE, "#0c0f12")
         draw = ImageDraw.Draw(canvas)
-        title_font = self._font(52, bold=True)
+        title_font = self._fitted_font(draw, build.name, 620, maximum=52, minimum=28)
         heading_font = self._font(30, bold=True)
         body_font = self._font(25)
         small_font = self._font(21)
@@ -99,23 +99,23 @@ class BuildRenderer:
         subtitle = build.activity or "Build de Albion Online"
         if build.minimum_ip:
             subtitle += f"  ·  IP mínimo {build.minimum_ip}"
-        draw.text((67, 120), subtitle, fill="#b9c0c8", font=small_font)
+        draw.text((67, 125), textwrap.shorten(subtitle, width=58, placeholder="…"), fill="#b9c0c8", font=small_font)
 
         for label, item in build.equipment:
             if not item:
                 continue
             x, y = SLOT_POSITIONS[label]
-            draw.rounded_rectangle((x, y, x + 170, y + 170), radius=22, fill="#22272d")
+            draw.rounded_rectangle((x, y, x + 170, y + 160), radius=22, fill="#22272d")
             icon = icons.get(label)
             if icon is not None:
-                icon.thumbnail((160, 160), Image.Resampling.LANCZOS)
-                canvas.paste(icon, (x + 5, y + 5), icon)
+                icon.thumbnail((150, 150), Image.Resampling.LANCZOS)
+                canvas.paste(icon, (x + 10, y + 5), icon)
             else:
                 draw.text((x + 67, y + 61), "?", fill="#6f7882", font=title_font)
             short_name = textwrap.shorten(item, width=22, placeholder="…")
             text_box = draw.textbbox((0, 0), short_name, font=small_font)
             text_width = text_box[2] - text_box[0]
-            draw.text((x + 85 - text_width / 2, y + 174), short_name, fill="#d5d9dd", font=small_font)
+            draw.text((x + 85 - text_width / 2, y + 164), short_name, fill="#d5d9dd", font=small_font)
 
         draw.text((810, 62), "Equipamiento", fill="#ffffff", font=heading_font)
         y = 120
@@ -154,3 +154,14 @@ class BuildRenderer:
             if path.exists():
                 return ImageFont.truetype(str(path), size=size)
         return ImageFont.load_default()
+
+    def _fitted_font(
+        self, draw: ImageDraw.ImageDraw, text: str, maximum_width: int,
+        *, maximum: int, minimum: int,
+    ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        for size in range(maximum, minimum - 1, -2):
+            font = self._font(size, bold=True)
+            box = draw.textbbox((0, 0), text, font=font)
+            if box[2] - box[0] <= maximum_width:
+                return font
+        return self._font(minimum, bold=True)

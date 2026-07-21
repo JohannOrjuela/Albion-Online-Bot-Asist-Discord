@@ -18,7 +18,8 @@ personalizados e inscripciones persistentes aunque el bot o el PC se reinicien.
    envíes por Discord.
 4. En **OAuth2 → URL Generator**, selecciona `bot` y `applications.commands`.
 5. Concede al bot: **View Channels**, **Send Messages**, **Embed Links**, **Read
-   Message History** y **Use Application Commands**.
+   Message History**, **Use Application Commands**, **Attach Files** y **Mention
+   @everyone, @here, and All Roles**.
 6. Abre la URL generada e invita el bot a tu servidor.
 
 No hace falta activar `Message Content Intent`: esta versión usa comandos `/` y botones.
@@ -122,8 +123,12 @@ Después crea una salida sin volver a escribir la composición:
 /evento desde-plantilla plantilla:Arena Principal fecha:25/07/2026 20:00
 ```
 
-El panel mostrará la build asignada bajo cada rol. Al apuntarse, el jugador recibe el
-nombre de su build y puede abrirla con `/build ver`.
+El panel mostrará la build asignada bajo cada rol. Al apuntarse, el jugador recibe
+inmediatamente y de forma privada el resumen y la imagen completa de su build. También
+puede volver a abrirla con `/build ver`.
+
+Los eventos nuevos mencionan `@everyone`. Para que la mención genere una notificación,
+el rol del bot debe tener **Mencionar @everyone, @here y todos los roles** en ese canal.
 
 ## Emojis personalizados
 

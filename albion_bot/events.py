@@ -84,10 +84,15 @@ class EventsCog(commands.Cog):
             starts_at=starts_at,
             slots=slots,
         )
-        view = EventSignupView(self.database, event)
+        view = EventSignupView(self.database, event, self.bot.build_renderer)  # type: ignore[attr-defined]
         try:
             assert interaction.channel is not None
-            message = await interaction.channel.send(embed=build_event_embed(event), view=view)
+            message = await interaction.channel.send(
+                content="@everyone",
+                embed=build_event_embed(event),
+                view=view,
+                allowed_mentions=discord.AllowedMentions(everyone=True),
+            )
         except Exception:
             self.database.set_event_status(event.id, EventStatus.CANCELLED)
             raise
@@ -139,10 +144,15 @@ class EventsCog(commands.Cog):
             description=(descripcion or template.description).strip()[:2000],
             starts_at=starts_at, slots=template.slots,
         )
-        view = EventSignupView(self.database, event)
+        view = EventSignupView(self.database, event, self.bot.build_renderer)  # type: ignore[attr-defined]
         try:
             assert interaction.channel is not None
-            message = await interaction.channel.send(embed=build_event_embed(event), view=view)
+            message = await interaction.channel.send(
+                content="@everyone",
+                embed=build_event_embed(event),
+                view=view,
+                allowed_mentions=discord.AllowedMentions(everyone=True),
+            )
         except discord.Forbidden:
             self.database.set_event_status(event.id, EventStatus.CANCELLED)
             await interaction.followup.send(
@@ -189,7 +199,9 @@ class EventsCog(commands.Cog):
             try:
                 channel = self.bot.get_channel(event.channel_id) or await self.bot.fetch_channel(event.channel_id)
                 message = await channel.fetch_message(event.message_id)  # type: ignore[union-attr]
-                view = EventSignupView(self.database, event)
+                view = EventSignupView(
+                    self.database, event, self.bot.build_renderer  # type: ignore[attr-defined]
+                )
                 await message.edit(embed=build_event_embed(event), view=view)
             except discord.HTTPException:
                 pass

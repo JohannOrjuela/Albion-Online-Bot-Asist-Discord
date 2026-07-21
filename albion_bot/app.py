@@ -34,7 +34,10 @@ class AlbionGuildBot(commands.Bot):
         await self.add_cog(ConfigurationCog(self.database))
         for event in self.database.get_open_events():
             if event.message_id is not None:
-                self.add_view(EventSignupView(self.database, event), message_id=event.message_id)
+                self.add_view(
+                    EventSignupView(self.database, event, self.build_renderer),
+                    message_id=event.message_id,
+                )
 
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)

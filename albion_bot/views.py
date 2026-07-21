@@ -5,6 +5,8 @@ from collections import defaultdict
 import discord
 
 from .activities import ACTIVITIES
+from .build_renderer import BuildRenderer
+from .builds import build_summary_embed, safe_filename
 from .database import Database
 from .domain import EventStatus, GuildEvent, SignupResult, SlotDefinition
 
@@ -79,9 +81,12 @@ class LeaveButton(discord.ui.Button["EventSignupView"]):
 
 
 class EventSignupView(discord.ui.View):
-    def __init__(self, database: Database, event: GuildEvent) -> None:
+    def __init__(
+        self, database: Database, event: GuildEvent, renderer: BuildRenderer | None = None
+    ) -> None:
         super().__init__(timeout=None)
         self.database = database
+        self.renderer = renderer
         self.event_id = event.id
         for index, slot in enumerate(event.slots):
             self.add_item(RoleButton(event.id, slot, index // 5))
@@ -115,8 +120,25 @@ class EventSignupView(discord.ui.View):
             await self._refresh_message(interaction)
         message = messages[result]
         if build_name:
-            message += f"\nTu build asignada es **{build_name}**. Usa `/build ver` para consultarla."
+            message += f"\nTu build asignada es **{build_name}**."
         await interaction.followup.send(message, ephemeral=True)
+        if (
+            build_name
+            and self.renderer is not None
+            and result in {SignupResult.JOINED, SignupResult.MOVED, SignupResult.ALREADY_JOINED}
+        ):
+            build = self.database.get_build(event.guild_id, build_name) if event else None
+            if build is not None:
+                image, missing = await self.renderer.render(build)
+                warning = None
+                if missing:
+                    warning = "⚠️ No encontré iconos para: " + ", ".join(missing)
+                await interaction.followup.send(
+                    content=warning,
+                    embed=build_summary_embed(build),
+                    file=discord.File(image, filename=f"{safe_filename(build.name)}.png"),
+                    ephemeral=True,
+                )
 
     async def leave(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
