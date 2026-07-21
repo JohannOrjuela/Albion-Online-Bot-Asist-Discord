@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from albion_bot.build_renderer import BuildRenderer, item_icon_url
+from albion_bot.build_renderer import BuildRenderer, SLOT_POSITIONS, item_icon_url
 from albion_bot.domain import AlbionBuild
 
 
@@ -24,6 +24,12 @@ class BuildRendererTests(unittest.TestCase):
             renderer = BuildRenderer(Path(directory))
             image = renderer._compose(build, {})
         self.assertEqual(image.size, (1600, 900))
+
+    def test_offhand_is_below_cape(self) -> None:
+        cape_x, cape_y = SLOT_POSITIONS["Capa"]
+        offhand_x, offhand_y = SLOT_POSITIONS["Mano secundaria"]
+        self.assertEqual(offhand_x, cape_x)
+        self.assertGreater(offhand_y, cape_y)
 
 
 if __name__ == "__main__":

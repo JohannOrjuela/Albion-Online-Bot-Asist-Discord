@@ -16,7 +16,7 @@ from .domain import AlbionBuild
 RENDER_BASE_URL = "https://render.albiononline.com/v1/item"
 CANVAS_SIZE = (1600, 900)
 SLOT_POSITIONS = {
-    "Mano secundaria": (75, 185),
+    "Mano secundaria": (495, 400),
     "Casco": (285, 185),
     "Capa": (495, 185),
     "Arma": (75, 400),
