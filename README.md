@@ -69,6 +69,9 @@ conectado a la corriente.
 
 ## Comandos iniciales
 
+Usa `/help` dentro de Discord para ver el listado completo de comandos y el flujo
+recomendado de builds, plantillas y eventos.
+
 ### Crear un evento
 
 Cada actividad tiene su propio comando y un título fijo:

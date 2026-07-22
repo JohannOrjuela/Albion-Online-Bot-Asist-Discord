@@ -461,6 +461,29 @@ class Database:
             ).fetchall()
         return [template for row in rows if (template := self.get_template(guild_id, row["name"]))]
 
+    def list_template_names(self, guild_id: int, activity: str | None = None) -> list[str]:
+        query = "SELECT name FROM composition_templates WHERE guild_id = ?"
+        parameters: tuple[object, ...] = (guild_id,)
+        if activity is not None:
+            query += " AND activity = ?"
+            parameters += (activity,)
+        query += " ORDER BY name COLLATE NOCASE"
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [row["name"] for row in rows]
+
+    def delete_template_slot(self, guild_id: int, template_name: str, role_key: str) -> bool:
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                """DELETE FROM template_slots
+                   WHERE template_id = (
+                       SELECT id FROM composition_templates
+                       WHERE guild_id = ? AND name = ? COLLATE NOCASE
+                   ) AND role_key = ?""",
+                (guild_id, template_name.strip(), role_key),
+            )
+            return cursor.rowcount > 0
+
     def delete_template(self, guild_id: int, name: str) -> bool:
         with self._lock, self._connection() as connection:
             cursor = connection.execute(

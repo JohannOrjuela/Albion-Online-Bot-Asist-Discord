@@ -8,6 +8,7 @@ from albion_bot.builds import BuildsCog
 from albion_bot.configuration import ConfigurationCog
 from albion_bot.config import Settings
 from albion_bot.events import EventsCog
+from albion_bot.help import HelpCog
 from albion_bot.templates import TemplatesCog
 
 
@@ -34,6 +35,7 @@ class DiscordIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.bot.add_cog(TemplatesCog(self.bot, self.bot.database))
         await self.bot.add_cog(ConfigurationCog(self.bot.database))
+        await self.bot.add_cog(HelpCog())
         group = self.bot.tree.get_command("evento")
         self.assertIsNotNone(group)
         self.assertEqual(
@@ -45,7 +47,12 @@ class DiscordIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             {command.name for command in self.bot.tree.get_commands()},
-            {"evento", "build", "plantilla", "config"},
+            {"evento", "build", "plantilla", "config", "help"},
+        )
+        template_group = self.bot.tree.get_command("plantilla")
+        self.assertEqual(
+            {command.name for command in template_group.commands},
+            {"crear", "rol", "quitar-rol", "ver", "listar", "eliminar"},
         )
 
 

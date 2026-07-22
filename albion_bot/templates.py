@@ -20,7 +20,7 @@ def template_embed(template: CompositionTemplate) -> discord.Embed:
     preset = ACTIVITIES.get(template.activity)
     embed = discord.Embed(
         title=f"Plantilla · {template.name}",
-        description=template.description or "Composición reutilizable del gremio.",
+        description=template.description or "Composición reutilizable de la alianza.",
         color=preset.color if preset else 0x5865F2,
     )
     embed.add_field(
@@ -61,15 +61,19 @@ class TemplatesCog(commands.Cog):
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.choices(actividad=ACTIVITY_CHOICES)
+    @app_commands.describe(
+        incluir_roles_base="Añade automáticamente la composición recomendada"
+    )
     async def create_template(
         self,
         interaction: discord.Interaction,
         nombre: str,
         actividad: app_commands.Choice[str],
         descripcion: str | None = None,
-        incluir_roles_base: bool = False,
+        incluir_roles_base: bool = True,
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         template = self.database.create_template(
             interaction.guild_id, nombre[:80], actividad.value, (descripcion or "")[:1000]
         )
@@ -77,12 +81,15 @@ class TemplatesCog(commands.Cog):
             configured = self.database.get_role_emojis(interaction.guild_id)
             for slot in ACTIVITIES[actividad.value].slots:
                 template = self.database.upsert_template_slot(
-                    guild_id=interaction.guild_id, template_name=template.name,
-                    role_key=slot.key, label=slot.label,
-                    emoji=configured.get(slot.key, slot.emoji), capacity=slot.capacity,
+                    guild_id=interaction.guild_id,
+                    template_name=template.name,
+                    role_key=slot.key,
+                    label=slot.label,
+                    emoji=configured.get(slot.key, slot.emoji),
+                    capacity=slot.capacity,
                     build_id=None,
                 ) or template
-        await interaction.response.send_message(embed=template_embed(template), ephemeral=True)
+        await interaction.followup.send(embed=template_embed(template), ephemeral=True)
 
     @template_group.command(name="rol", description="Añade o actualiza un rol de una plantilla")
     @app_commands.guild_only()
@@ -104,15 +111,16 @@ class TemplatesCog(commands.Cog):
         emoji: str | None = None,
     ) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         template = self.database.get_template(interaction.guild_id, plantilla)
         if template is None:
-            await interaction.response.send_message("No encontré esa plantilla.", ephemeral=True)
+            await interaction.followup.send("No encontré esa plantilla.", ephemeral=True)
             return
         selected_build = None
         if build:
             selected_build = self.database.get_build(interaction.guild_id, build)
             if selected_build is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "No encontré esa build. Créala primero con `/build crear`.", ephemeral=True
                 )
                 return
@@ -123,44 +131,67 @@ class TemplatesCog(commands.Cog):
                 key, SLOT_EMOJIS.get(key, "⭐")
             )
         except ValueError as exc:
-            await interaction.response.send_message(str(exc), ephemeral=True)
+            await interaction.followup.send(str(exc), ephemeral=True)
             return
         updated = self.database.upsert_template_slot(
-            guild_id=interaction.guild_id, template_name=template.name,
-            role_key=key, label=rol.strip()[:80], emoji=selected_emoji,
-            capacity=cupos, build_id=selected_build.id if selected_build else None,
+            guild_id=interaction.guild_id,
+            template_name=template.name,
+            role_key=key,
+            label=rol.strip()[:80],
+            emoji=selected_emoji,
+            capacity=cupos,
+            build_id=selected_build.id if selected_build else None,
         )
         assert updated is not None
-        await interaction.response.send_message(embed=template_embed(updated), ephemeral=True)
+        await interaction.followup.send(embed=template_embed(updated), ephemeral=True)
+
+    @template_group.command(name="quitar-rol", description="Quita un rol de una plantilla")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def remove_template_role(
+        self, interaction: discord.Interaction, plantilla: str, rol: str
+    ) -> None:
+        assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
+        deleted = self.database.delete_template_slot(
+            interaction.guild_id, plantilla, slugify(rol)
+        )
+        await interaction.followup.send(
+            "Rol eliminado de la plantilla." if deleted else "No encontré ese rol o plantilla.",
+            ephemeral=True,
+        )
 
     @template_group.command(name="ver", description="Muestra una plantilla guardada")
     @app_commands.guild_only()
     async def view_template(self, interaction: discord.Interaction, nombre: str) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         template = self.database.get_template(interaction.guild_id, nombre)
         if template is None:
-            await interaction.response.send_message("No encontré esa plantilla.", ephemeral=True)
+            await interaction.followup.send("No encontré esa plantilla.", ephemeral=True)
             return
-        await interaction.response.send_message(embed=template_embed(template), ephemeral=True)
+        await interaction.followup.send(embed=template_embed(template), ephemeral=True)
 
-    @template_group.command(name="listar", description="Lista las plantillas del gremio")
+    @template_group.command(name="listar", description="Lista las plantillas de la alianza")
     @app_commands.guild_only()
     async def list_templates(self, interaction: discord.Interaction) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         templates = self.database.list_templates(interaction.guild_id)
         if not templates:
-            await interaction.response.send_message("Todavía no hay plantillas.", ephemeral=True)
+            await interaction.followup.send("Todavía no hay plantillas.", ephemeral=True)
             return
         lines = [f"• **{item.name}** — {len(item.slots)} roles" for item in templates]
-        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
 
     @template_group.command(name="eliminar", description="Elimina una plantilla")
     @app_commands.guild_only()
     @app_commands.checks.has_permissions(manage_guild=True)
     async def delete_template(self, interaction: discord.Interaction, nombre: str) -> None:
         assert interaction.guild_id is not None
+        await interaction.response.defer(ephemeral=True)
         deleted = self.database.delete_template(interaction.guild_id, nombre)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Plantilla eliminada." if deleted else "No encontré esa plantilla.", ephemeral=True
         )
 
@@ -171,12 +202,13 @@ class TemplatesCog(commands.Cog):
             return []
         needle = current.casefold()
         return [
-            app_commands.Choice(name=template.name, value=template.name)
-            for template in self.database.list_templates(interaction.guild_id)
-            if needle in template.name.casefold()
+            app_commands.Choice(name=name, value=name)
+            for name in self.database.list_template_names(interaction.guild_id)
+            if needle in name.casefold()
         ][:25]
 
     @set_template_role.autocomplete("plantilla")
+    @remove_template_role.autocomplete("plantilla")
     async def role_template_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
@@ -196,13 +228,12 @@ class TemplatesCog(commands.Cog):
         ][:25]
 
     @view_template.autocomplete("nombre")
-    async def view_template_name_autocomplete(
+    @delete_template.autocomplete("nombre")
+    async def template_name_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
         return await self._template_autocomplete(interaction, current)
 
-    @delete_template.autocomplete("nombre")
-    async def delete_template_name_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
-        return await self._template_autocomplete(interaction, current)
+
+async def setup(bot: commands.Bot) -> None:
+    await bot.add_cog(TemplatesCog(bot, bot.database))  # type: ignore[attr-defined]

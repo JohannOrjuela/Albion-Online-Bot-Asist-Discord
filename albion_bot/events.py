@@ -382,10 +382,58 @@ class EventsCog(commands.Cog):
             return []
         needle = current.casefold()
         return [
-            app_commands.Choice(name=template.name, value=template.name)
-            for template in self.database.list_templates(interaction.guild_id)
-            if needle in template.name.casefold() and template.activity in TITLES
+            app_commands.Choice(name=name, value=name)
+            for name in self.database.list_template_names(interaction.guild_id)
+            if needle in name.casefold()
         ][:25]
+
+    async def _activity_template_autocomplete(
+        self, interaction: discord.Interaction, current: str, activity: str
+    ) -> list[app_commands.Choice[str]]:
+        if interaction.guild_id is None:
+            return []
+        needle = current.casefold()
+        return [
+            app_commands.Choice(name=name, value=name)
+            for name in self.database.list_template_names(interaction.guild_id, activity)
+            if needle in name.casefold()
+        ][:25]
+
+    @hellgate.autocomplete("plantilla")
+    async def hellgate_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "hg")
+
+    @arena.autocomplete("plantilla")
+    async def arena_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "arena")
+
+    @league.autocomplete("plantilla")
+    async def league_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "crystal")
+
+    @roads.autocomplete("plantilla")
+    async def roads_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "avalon")
+
+    @static.autocomplete("plantilla")
+    async def static_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "static")
+
+    @group_dungeon.autocomplete("plantilla")
+    async def group_template_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._activity_template_autocomplete(interaction, current, "group")
 
     @event_group.command(name="cerrar", description="Cierra las inscripciones de un evento")
     @app_commands.guild_only()

@@ -11,6 +11,7 @@ from .builds import BuildsCog
 from .configuration import ConfigurationCog
 from .database import Database
 from .events import EventsCog
+from .help import HelpCog
 from .templates import TemplatesCog
 from .views import EventSignupView
 
@@ -32,6 +33,7 @@ class AlbionGuildBot(commands.Bot):
         await self.add_cog(BuildsCog(self, self.database, self.build_renderer))
         await self.add_cog(TemplatesCog(self, self.database))
         await self.add_cog(ConfigurationCog(self.database))
+        await self.add_cog(HelpCog())
         for event in self.database.get_open_events():
             if event.message_id is not None:
                 self.add_view(

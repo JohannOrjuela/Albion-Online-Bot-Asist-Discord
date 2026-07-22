@@ -90,6 +90,16 @@ class DatabaseTests(unittest.TestCase):
             "<:holy:123456789012345678>",
         )
 
+    def test_template_role_can_be_removed(self) -> None:
+        self.database.create_template(1, "Liga", "crystal", "")
+        self.database.upsert_template_slot(
+            guild_id=1, template_name="Liga", role_key="frontline",
+            label="Frontline", emoji="🛡️", capacity=1, build_id=None,
+        )
+        self.assertTrue(self.database.delete_template_slot(1, "Liga", "frontline"))
+        template = self.database.get_template(1, "Liga")
+        self.assertEqual(template.slots, ())  # type: ignore[union-attr]
+
 
 if __name__ == "__main__":
     unittest.main()
